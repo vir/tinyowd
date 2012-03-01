@@ -8,6 +8,7 @@ CFLAGS=-std=c99 -g -O -Wall -I /usr/lib/avr/include/avr -I C:\WinAVR-20070525\av
 
 TARGETS=ds1990_attiny13.hex ds1990_attiny45.hex ds1990_atmega168.hex
 TARGETS+=ds2413_attiny13.hex ds2413_attiny45.hex ds2413_atmega168.hex
+TARGETS+=ds2450_atmega168.hex
 # TODO: ds2405? ds2406? ds2408 ds2409? ds2423? ds2450 ds2890?
 
 default: $(TARGETS) $(TARGETS:.hex=.asm)
