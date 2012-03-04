@@ -80,7 +80,7 @@ inline int16_t ows_timer_read()
 uint8_t ows_crc8(char* data, uint8_t len)
 {
     uint8_t crc = 0;
-    
+
     while (len--) {
         uint8_t inbyte = *data++;
         for (uint8_t i = 8; i; i--) {
@@ -106,7 +106,7 @@ uint8_t ows_wait_reset() {
     ows_release_bus();
     sei();
     while(ows_read_bus()) { };
-    
+
     ows_timer_start(uS_TO_TIMER_COUNTS(540));
     while (ows_read_bus() == 0) {
         if (ows_timer_read() < 0) {
@@ -121,7 +121,6 @@ uint8_t ows_wait_reset() {
     ows_delay_30uS();
     return 1;
 }
-
 
 uint8_t ows_presence() {
     errno = ONEWIRE_NO_ERROR;
@@ -193,7 +192,6 @@ uint8_t ows_recv()
     return r;
 }
 
-
 void ows_send_bit(uint8_t v)
 {
     cli();
@@ -257,7 +255,7 @@ uint8_t ows_search() {
 
 uint8_t ows_recv_data(char buf[], uint8_t len) {
     uint8_t bytes_received = 0;
-    
+
     for (int i=0; i<len; i++) {
         buf[i] = ows_recv();
         if (errno != ONEWIRE_NO_ERROR)
@@ -315,3 +313,4 @@ uint8_t ows_wait_request(uint8_t ignore_errors)
             return 0;
     }
 }
+
