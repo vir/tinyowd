@@ -22,6 +22,9 @@ default: $(TARGETS) $(TARGETS:.hex=.asm)
 %_atmega168: %.c ows.c ows.h
 	$(CC) ${CFLAGS} -mmcu=atmega168 -o $@ $< ows.c
 
+ds2450_atmega168: ds2450.c ows.c ows.h
+	$(CC) ${CFLAGS} -DWITH_CRC16 -mmcu=atmega168 -o $@ $< ows.c
+
 PROGRAMS=$(TARGETS:.hex=)
 ASSEMBLY=$(TARGETS:.hex=.asm)
 
