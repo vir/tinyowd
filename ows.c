@@ -7,6 +7,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
+#include <avr/sleep.h>
 
 // ows private data
 char ows_rom[8];
@@ -98,12 +99,28 @@ void ows_setup(char * rom)
         ows_rom[i] = rom[i];
     ows_rom[7] = ows_crc8(ows_rom, 7);
     OWPORT(PORT) &= ~(OWMASK); /* We only need "0" - simulate open drain */
+#ifdef GIFR /* tiny45 */
+    GIFR |= (1 << PCIF); /* enable pin change interrupts */
+#else
+    PCICR |= 0x07; /* enable all pin change interrupts */
+#endif
+    MCUCR = 1<<SE; /* sleep enable */
 }
 
 uint8_t ows_wait_reset() {
     errno = ONEWIRE_NO_ERROR;
-    ows_release_bus();
-    while(ows_read_bus()) { };
+    ows_release_bus(); /* just in case */
+    OWPCMSK |= OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
+    if(ows_read_bus()) {
+        sei();
+        sleep_cpu();
+        cli();
+    }
+    OWPCMSK &= ~OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
+    if(ows_read_bus()) {
+        errno = ONEWIRE_INTERRUPTED;
+        return 0;
+    }
 
     ows_timer_start(uS_TO_TIMER_COUNTS(540));
     while (ows_read_bus() == 0) {
