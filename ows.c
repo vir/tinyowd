@@ -14,8 +14,7 @@ uint8_t errno;
 
 inline void ows_pull_bus_down()
 {
-    OWPORT(PORT) &= ~(OWMASK);
-    OWPORT(DDR) |= (OWMASK);    // drive output low
+    OWPORT(DDR) |= (OWMASK);    // drives output low
 }
 
 inline void ows_release_bus()
@@ -98,13 +97,12 @@ void ows_setup(char * rom)
     for (int i=0; i<7; i++)
         ows_rom[i] = rom[i];
     ows_rom[7] = ows_crc8(ows_rom, 7);
+    OWPORT(PORT) &= ~(OWMASK); /* We only need "0" - simulate open drain */
 }
 
 uint8_t ows_wait_reset() {
     errno = ONEWIRE_NO_ERROR;
-    cli();
     ows_release_bus();
-    sei();
     while(ows_read_bus()) { };
 
     ows_timer_start(uS_TO_TIMER_COUNTS(540));
@@ -124,17 +122,13 @@ uint8_t ows_wait_reset() {
 
 uint8_t ows_presence() {
     errno = ONEWIRE_NO_ERROR;
-    cli();
     ows_pull_bus_down();
-    sei();
     // 120uS delay
     ows_delay_30uS();
     ows_delay_30uS();
     ows_delay_30uS();
     ows_delay_30uS();
-    cli();
     ows_release_bus();
-    sei();
     //ows_delay(uS(300 - 25)); // XXX 25 - ?
     for(uint8_t t = 0; t < ((300 - 25)/30); ++t)
         ows_delay_30uS();
@@ -168,16 +162,13 @@ uint8_t ows_recv_bit(void)
 {
     uint8_t r;
 
-    cli();
     ows_release_bus();
     if (!ows_wait_time_slot() ) {
         errno = ONEWIRE_READ_TIMESLOT_TIMEOUT;
-        sei();
         return 0;
     }
     ows_delay_30uS();
     r = ows_read_bus();
-    sei();
     return r;
 }
 
@@ -194,23 +185,18 @@ uint8_t ows_recv()
 
 void ows_send_bit(uint8_t v)
 {
-    cli();
     ows_release_bus();
     if (!ows_wait_time_slot() ) {
         errno = ONEWIRE_WRITE_TIMESLOT_TIMEOUT;
-        sei();
         return;
     }
     if (v & 1)
         ows_delay_30uS();
     else {
-        cli();
         ows_pull_bus_down();
         ows_delay_30uS();
         ows_release_bus();
-        sei();
     }
-    sei();
     return;
 }
 
