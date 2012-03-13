@@ -25,13 +25,13 @@
 #endif
 
 enum ows_error_code {
-  ONEWIRE_NO_ERROR = 0,
-  ONEWIRE_READ_TIMESLOT_TIMEOUT  = 1,
-  ONEWIRE_WRITE_TIMESLOT_TIMEOUT = 2,
-  /*ONEWIRE_WAIT_RESET_TIMEOUT     = 3,*/
-  ONEWIRE_VERY_LONG_RESET        = 4,
-  ONEWIRE_VERY_SHORT_RESET       = 5,
-  ONEWIRE_PRESENCE_LOW_ON_LINE   = 6,
+    ONEWIRE_NO_ERROR = 0,
+    ONEWIRE_READ_TIMESLOT_TIMEOUT  = 1,
+    ONEWIRE_WRITE_TIMESLOT_TIMEOUT = 2,
+    /*ONEWIRE_WAIT_RESET_TIMEOUT     = 3,*/
+    ONEWIRE_VERY_LONG_RESET        = 4,
+    ONEWIRE_VERY_SHORT_RESET       = 5,
+    ONEWIRE_PRESENCE_LOW_ON_LINE   = 6,
 };
 
 uint8_t ows_wait_request(uint8_t ignore_errors);
@@ -42,3 +42,6 @@ extern uint8_t errno;
 
 #endif /* OWS_H_INCLUDED */
 
+/*
+ vim: ts=4 sw=4 sts=4 et
+*/
