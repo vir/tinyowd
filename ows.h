@@ -43,12 +43,6 @@ uint8_t ows_recv();
 void ows_send(uint8_t v);
 extern uint8_t errno;
 
-#ifdef WITH_CRC16
-void ows_crc16_reset();
-void ows_crc16_update(uint8_t b);
-uint16_t ows_crc16_get();
-#endif /* WITH_CRC16 */
-
 #endif /* OWS_H_INCLUDED */
 
 /*

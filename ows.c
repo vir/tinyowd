@@ -116,7 +116,7 @@ uint8_t ows_wait_reset() {
         sleep_cpu();
         cli();
     }
-    OWPCMSK &= ~OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
+    OWPCMSK &= ~OWMASK; /* disable pin change interrupt here, global interrupts are still disabled */
     if(ows_read_bus()) {
         errno = ONEWIRE_INTERRUPTED;
         return 0;
@@ -316,24 +316,6 @@ uint8_t ows_wait_request(uint8_t ignore_errors)
             return 0;
     }
 }
-
-#ifdef WITH_CRC16
-static uint16_t crc16;
-
-void ows_crc16_reset()
-{
-    crc16 = 0;
-}
-
-void ows_crc16_update(uint8_t b)
-{
-}
-
-uint16_t ows_crc16_get()
-{
-    return crc16;
-}
-#endif /* WITH_CRC16 */
 
 /*
  vim: ts=4 sw=4 sts=4 et
