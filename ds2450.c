@@ -1,4 +1,5 @@
 #include "ows.h"
+#include "ow_crc16.h"
 #include <avr/io.h>
 #include <string.h>
 
@@ -56,35 +57,35 @@ int main()
 		{
 			uint16_t memory_address;
 			uint8_t b;
-			ows_crc16_reset();
+			ow_crc16_reset();
 			switch(ows_recv())
 			{
 			case 0xAA: /* READ MEMORY */
-				ows_crc16_update(0xAA);
+				ow_crc16_update(0xAA);
 
 				b = ows_recv();
 				((uint8_t*)&memory_address)[0] = b;
-				ows_crc16_update(b);
+				ow_crc16_update(b);
 
 				b = ows_recv();
 				((uint8_t*)&memory_address)[1] = b;
-				ows_crc16_update(b);
+				ow_crc16_update(b);
 
 				for(;;)
 				{
 					uint8_t b = ((uint8_t*)&memory)[memory_address];
 					ows_send(b);
-					ows_crc16_update(b);
+					ow_crc16_update(b);
 
 					if(errno)
 						break;
 
 					if((memory_address & 0x0F) == 0x0F) /* end of page */
 					{
-						uint16_t crc = ows_crc16_get();
+						uint16_t crc = ow_crc16_get();
 						ows_send(((uint8_t*)&crc)[0]);
 						ows_send(((uint8_t*)&crc)[1]);
-						ows_crc16_reset();
+						ow_crc16_reset();
 					}
 					++memory_address;
 					if(memory_address >= sizeof(memory))
@@ -93,23 +94,23 @@ int main()
 				}
 				break;
 			case 0x55: /* WRITE MEMORY */
-				ows_crc16_update(0x55);
+				ow_crc16_update(0x55);
 
 				b = ows_recv();
 				((uint8_t*)&memory_address)[0] = b;
-				ows_crc16_update(b);
+				ow_crc16_update(b);
 
 				b = ows_recv();
 				((uint8_t*)&memory_address)[1] = b;
-				ows_crc16_update(b);
+				ow_crc16_update(b);
 
 				for(;;)
 				{
 					b = ows_recv();
 					if(errno)
 						break;
-					ows_crc16_update(b);
-					uint16_t crc = ows_crc16_get();
+					ow_crc16_update(b);
+					uint16_t crc = ow_crc16_get();
 					ows_send(((uint8_t*)&crc)[0]);
 					ows_send(((uint8_t*)&crc)[1]);
 
@@ -120,9 +121,9 @@ int main()
 						break;
 
 					++memory_address;
-					ows_crc16_reset();
-					ows_crc16_update(((uint8_t*)&memory_address)[0]);
-					ows_crc16_update(((uint8_t*)&memory_address)[1]);
+					ow_crc16_reset();
+					ow_crc16_update(((uint8_t*)&memory_address)[0]);
+					ow_crc16_update(((uint8_t*)&memory_address)[1]);
 				}
 
 				break;
