@@ -1,5 +1,6 @@
 #include "ows.h"
 #include <avr/io.h>
+#include <wdt.h>
 
 char myrom[8] = {0x3A, 0xAA, 0xDA, 0xBB, 0xCF, 0x00, 0x00, 0x00};
 
@@ -39,6 +40,11 @@ void pio_write()
 
 int main()
 {
+	wdt_disable();
+#if defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny13__)
+	CLKPR = 0x80; /* Clock prescaler change enable */
+	CLKPR = 0x00; /* Division Factor = 1, system clock 9.6MHz */
+#endif
 	ows_setup(myrom);
 	PIO_PORT(PORT) = 0;
 	for(;;)
