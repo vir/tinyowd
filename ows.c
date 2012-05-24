@@ -167,10 +167,15 @@ uint8_t ows_wait_time_slot()
     while (! ows_read_bus())
         if (--retries == 0)
             return 0;
+#if OWS_ENABLE_TIMESLOT_TIMEOUT
     retries = TIMESLOT_WAIT_RETRY_COUNT;
     while ( ows_read_bus())
         if (--retries == 0)
             return 0;
+#else
+    while (ows_read_bus())
+        ;
+#endif /* OWS_ENABLE_TIMESLOT_TIMEOUT */
     return 1;
 #undef TIMESLOT_WAIT_RETRY_COUNT
 }
@@ -303,7 +308,7 @@ uint8_t ows_recv_process_cmd() {
 uint8_t ows_wait_request(uint8_t ignore_errors)
 {
     errno = ONEWIRE_NO_ERROR;
-    for (;;) {
+    while(errno != ONEWIRE_INTERRUPTED) {
         if (!ows_wait_reset() )
             continue;
         if (!ows_presence() )
@@ -315,6 +320,7 @@ uint8_t ows_wait_request(uint8_t ignore_errors)
         else
             return 0;
     }
+    return 0; /* Interruped */
 }
 
 /*
