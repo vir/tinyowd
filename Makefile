@@ -9,6 +9,8 @@ CFLAGS=-std=c99 -g -O -Wall -I /usr/lib/avr/include/avr -I C:\WinAVR-20070525\av
 TARGETS=ds1990_attiny13.hex ds1990_attiny45.hex ds1990_atmega168.hex
 TARGETS+=ds2413_attiny13.hex ds2413_attiny45.hex ds2413_atmega168.hex
 TARGETS+=ds2450_atmega168.hex
+TARGETS+=ds2413ex_attiny45.hex
+TARGETS+=ds2480_atmega168.hex
 # TODO: ds2405? ds2406? ds2408 ds2409? ds2423? ds2450 ds2890?
 
 default: $(TARGETS) $(TARGETS:.hex=.asm)
@@ -22,8 +24,11 @@ default: $(TARGETS) $(TARGETS:.hex=.asm)
 %_atmega168: %.c ows.c ows.h
 	$(CC) ${CFLAGS} -mmcu=atmega168 -o $@ $< ows.c
 
-ds2450_atmega168: ds2450.c ows.c ows.h
-	$(CC) ${CFLAGS} -DWITH_CRC16 -mmcu=atmega168 -o $@ $< ows.c
+ds2450_atmega168: ds2450.c ows.c ows.h ow_crc16.c ow_crc16.h
+	$(CC) ${CFLAGS} -DWITH_CRC16 -mmcu=atmega168 -o $@ $< ows.c ow_crc16.c
+
+ds2413ex_attiny45: ds2413ex.c ows.c ows.h debounce.c debounce.h
+	$(CC) ${CFLAGS} -mmcu=attiny45 -o $@ $< ows.c debounce.c
 
 PROGRAMS=$(TARGETS:.hex=)
 ASSEMBLY=$(TARGETS:.hex=.asm)
