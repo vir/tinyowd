@@ -30,21 +30,15 @@ inline uint8_t ows_read_bus()
 
 inline void ows_delay_30uS() // delayMicroseconds(30)
 {
-    uint8_t oldSREG;
     uint16_t us = (30L * CLK_FREQ) / 4L / 1000L;
     // account for the time taken in the preceeding commands.
     us -= 2;
-
-    oldSREG = SREG;
-    cli();
 
     // busy wait
     __asm__ __volatile__ (
         "1: sbiw %0,1" "\n\t" // 2 cycles
         "brne 1b" : "=w" (us) : "0" (us) // 2 cycles
     );
-
-    SREG = oldSREG;
 }
 
 volatile int16_t ows_timestamp;
