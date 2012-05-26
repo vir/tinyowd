@@ -38,6 +38,12 @@ void pio_write()
 	}
 }
 
+void toggle_debug_led()
+{
+	DDRB|=0x08;
+	PORTB^=0x08;
+}
+
 int main()
 {
 	wdt_disable();
@@ -49,6 +55,9 @@ int main()
 	PIO_PORT(PORT) = 0;
 	for(;;)
 	{
+#if 0
+		toggle_debug_led();
+#endif
 		if(ows_wait_request(0))
 		{
 #if 0 /* echo */
