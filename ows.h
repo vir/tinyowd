@@ -15,12 +15,18 @@
 # define OWPORT(x) x##D
 # define OWPCMSK PCMSK2 /* PCMSK0 - Port B, PCMSK1 - Port C, PCMSK2 - Port D */
 # define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) ==> pins 8 and 10 on Arduino nano */
-#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny13__)
-# warning ===== Configured for ATTiny(13,24,45,85) =====
+#elif defined(__AVR_ATtiny13__)
+# warning ===== Configured for ATTiny(13) =====
 # define CLK_FREQ 9600L
 # define OWMASK 0x02
 # define OWPORT(x) x##B
 # define OWPCMSK PCMSK
+# define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) */
+#elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__)
+# warning ===== Configured for ATTiny(25,45,85) =====
+# define CLK_FREQ 8000L
+# define OWMASK 0x02
+# define OWPORT(x) x##B
 # define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) */
 #else
 # error Unsupported MCU
