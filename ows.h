@@ -27,6 +27,7 @@
 # define CLK_FREQ 8000L
 # define OWMASK 0x02
 # define OWPORT(x) x##B
+# define OWPCMSK PCMSK
 # define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) */
 #else
 # error Unsupported MCU
