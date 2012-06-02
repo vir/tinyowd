@@ -94,11 +94,11 @@ void ows_setup(char * rom)
     ows_rom[7] = ows_crc8(ows_rom, 7);
     OWPORT(PORT) &= ~(OWMASK); /* We only need "0" - simulate open drain */
 #ifdef GIFR /* tiny45 */
-    GIFR |= (1 << PCIF); /* enable pin change interrupts */
+    GIMSK |= (1 << PCIE); /* enable pin change interrupts */
 #else
     PCICR |= 0x07; /* enable all pin change interrupts */
 #endif
-    MCUCR = 1<<SE; /* sleep enable */
+    MCUCR = 1<<SE; /* sleep enable (idle mode) */
 }
 
 uint8_t ows_wait_reset() {
@@ -116,7 +116,7 @@ uint8_t ows_wait_reset() {
         return 0;
     }
 
-    ows_timer_start(uS_TO_TIMER_COUNTS(540));
+    ows_timer_start(uS_TO_TIMER_COUNTS(540 - (117UL*8000UL/CLK_FREQ))); /* it gets ~117uS to wake up tiny45! */
     while (ows_read_bus() == 0) {
         if (ows_timer_read() < 0) {
             errno = ONEWIRE_VERY_LONG_RESET;
