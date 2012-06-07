@@ -8,10 +8,14 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <avr/sleep.h>
+#include <avr/eeprom.h>
 
 // ows private data
 char ows_rom[8];
 uint8_t errno;
+#ifdef OWS_WRITE_ROM_ENABLE
+uint16_t ows_eeprom_addr;
+#endif
 
 inline void ows_pull_bus_down()
 {
@@ -91,6 +95,23 @@ void ows_setup(char * rom)
 {
     for (int i=0; i<7; i++)
         ows_rom[i] = rom[i];
+    ows_rom[7] = ows_crc8(ows_rom, 7);
+    OWPORT(PORT) &= ~(OWMASK); /* We only need "0" - simulate open drain */
+#ifdef GIFR /* tiny45 */
+    GIMSK |= (1 << PCIE); /* enable pin change interrupts */
+#else
+    PCICR |= 0x07; /* enable all pin change interrupts */
+#endif
+    MCUCR = 1<<SE; /* sleep enable (idle mode) */
+}
+
+void ows_setup2(uint8_t family, uint16_t eeprom_addr)
+{
+    ows_rom[0] = family;
+#ifdef OWS_WRITE_ROM_ENABLE
+    ows_eeprom_addr = eeprom_addr;
+#endif
+    eeprom_read_block((void*)&ows_rom[1], (const void*)eeprom_addr, 6);
     ows_rom[7] = ows_crc8(ows_rom, 7);
     OWPORT(PORT) &= ~(OWMASK); /* We only need "0" - simulate open drain */
 #ifdef GIFR /* tiny45 */
@@ -280,6 +301,21 @@ uint8_t ows_recv_process_cmd() {
             if (errno != ONEWIRE_NO_ERROR)
                 return 0;
             break;
+#ifdef OWS_WRITE_ROM_ENABLE
+        case 0xD5: // WRITE ROM
+            ows_recv_data(addr, 8);
+            if (errno != ONEWIRE_NO_ERROR)
+                return 0;
+            if (addr[0] != ows_rom[0] || addr[7] != ows_crc8(addr, 7))
+                return 0;
+DDRB|=0x18;
+PORTB|=0x18;
+	    eeprom_busy_wait();
+            eeprom_write_block(&addr[1], (void*)ows_eeprom_addr, 6);
+PORTB&=~0x18;
+            ows_send_data(ows_rom, 8);
+            return 0;
+#endif /* OWS_WRITE_ROM_ENABLE */
         case 0x55: // MATCH ROM
             ows_recv_data(addr, 8);
             if (errno != ONEWIRE_NO_ERROR)

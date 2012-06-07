@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define OWS_WRITE_ROM_ENABLE 1
+
 /* check predefines with << avr-cpp -dM -mmcu=atmega168 ows.c | grep -i avr >> */
 #if defined(__AVR_ATmega168__)
 # warning ===== Configured for ATMega168 =====
@@ -46,6 +48,7 @@ enum ows_error_code {
 
 uint8_t ows_wait_request(uint8_t ignore_errors);
 void ows_setup(char * rom);
+void ows_setup2(uint8_t family, uint16_t eeprom_addr);
 uint8_t ows_recv();
 void ows_send(uint8_t v);
 extern uint8_t errno;

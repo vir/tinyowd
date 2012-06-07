@@ -81,7 +81,7 @@ ISR(TIM0_COMPA_vect) {
 
 int main()
 {
-	ows_setup(myrom);
+	ows_setup2(0x3A, 0);
 	PIO_PORT(PORT) = 0;
 	for(;;)
 	{
