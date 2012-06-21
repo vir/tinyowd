@@ -28,7 +28,7 @@ ds2450_atmega168: ds2450.c ows.c ows.h ow_crc16.c ow_crc16.h
 	$(CC) ${CFLAGS} -DWITH_CRC16 -mmcu=atmega168 -o $@ $< ows.c ow_crc16.c
 
 ds2413ex_attiny45: ds2413ex.c ows.c ows.h debounce.c debounce.h
-	$(CC) ${CFLAGS} -mmcu=attiny45 -o $@ $< ows.c debounce.c
+	$(CC) ${CFLAGS} -mmcu=attiny45 -o $@ -D OWS_CONDSEARCH_ENABLE -D OWS_INTERRUPTS_ENABLE $< ows.c debounce.c
 
 PROGRAMS=$(TARGETS:.hex=)
 ASSEMBLY=$(TARGETS:.hex=.asm)
