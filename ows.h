@@ -35,6 +35,18 @@
 # error Unsupported MCU
 #endif
 
+#ifdef OWS_CONDSEARCH_ENABLE
+enum ows_flag_type {
+    OWS_FLAG_CONDSEARCH = 0x01,
+# ifdef OWS_INTERRUPTS_ENABLE
+    OWS_FLAG_INT_TYPE1  = 0x02,
+    OWS_FLAG_INT_TYPE2  = 0x04,
+    OWS_FLAG_MASK       = 0x0F,
+# endif
+};
+void ows_set_flag(enum ows_flag_type f);
+#endif
+
 enum ows_error_code {
     ONEWIRE_NO_ERROR = 0,
     ONEWIRE_READ_TIMESLOT_TIMEOUT  = 1,

@@ -16,6 +16,10 @@ uint8_t errno;
 #ifdef OWS_WRITE_ROM_ENABLE
 uint16_t ows_eeprom_addr;
 #endif
+#ifdef OWS_CONDSEARCH_ENABLE
+uint8_t ows_flag;
+# define OWS_FLAG_INTERRUPT_POSSIBLE 0x80
+#endif
 
 inline void ows_pull_bus_down()
 {
@@ -57,6 +61,11 @@ inline void ows_timer_start(int16_t timeout)
   TIMSK = 0x00; // disable timer interrupts
 #endif
   TCNT0 = 0; // count register
+}
+
+inline void ows_timer_stop()
+{
+  TCCR0B = 0x00; // clk/64
 }
 
 // 70 .. 540 uS --- Reset pulse
@@ -103,6 +112,9 @@ void ows_setup(char * rom)
     PCICR |= 0x07; /* enable all pin change interrupts */
 #endif
     MCUCR = 1<<SE; /* sleep enable (idle mode) */
+#ifdef OWS_CONDSEARCH_ENABLE
+    ows_flag = 0;
+#endif
 }
 
 void ows_setup2(uint8_t family, uint16_t eeprom_addr)
@@ -120,6 +132,9 @@ void ows_setup2(uint8_t family, uint16_t eeprom_addr)
     PCICR |= 0x07; /* enable all pin change interrupts */
 #endif
     MCUCR = 1<<SE; /* sleep enable (idle mode) */
+#ifdef OWS_CONDSEARCH_ENABLE
+    ows_flag = 0;
+#endif
 }
 
 uint8_t ows_wait_reset() {
@@ -138,10 +153,31 @@ uint8_t ows_wait_reset() {
     }
 
     ows_timer_start(uS_TO_TIMER_COUNTS(540 - (117UL*8000UL/CLK_FREQ))); /* it gets ~117uS to wake up tiny45! */
-    while (ows_read_bus() == 0) {
-        if (ows_timer_read() < 0) {
-            errno = ONEWIRE_VERY_LONG_RESET;
-            return 0;
+#ifdef OWS_INTERRUPTS_ENABLE /* TODO: Generate "TYPE2 interrupt" here */
+    if(ows_flag & OWS_FLAG_INT_TYPE2) {
+        /* extend reset up to 960..4800uS */
+        while (ows_read_bus() == 0) {
+            if (ows_timer_read() > uS_TO_TIMER_COUNTS(540 - 400)) {
+                ows_pull_bus_down();
+                for(uint8_t i = 20; i; --i) /* 400 + 20*30 = 1mS approx. */
+                    ows_delay_30uS();
+                ows_release_bus();
+                ows_delay_30uS();
+                return 0;
+            }
+        }
+    } else
+#endif
+    {
+        while (ows_read_bus() == 0) {
+            if (ows_timer_read() <= 0) {
+#if 0 /* too long reset error makes too litle sense */
+                errno = ONEWIRE_VERY_LONG_RESET;
+                return 0;
+#else
+                ows_timer_stop();
+#endif
+            }
         }
     }
     if (ows_timer_read() > uS_TO_TIMER_COUNTS(70)) {
@@ -316,6 +352,12 @@ PORTB&=~0x18;
             ows_send_data(ows_rom, 8);
             return 0;
 #endif /* OWS_WRITE_ROM_ENABLE */
+#ifdef OWS_CONDSEARCH_ENABLE
+        case 0xEC: // CONDITIONAL SEARCH
+            if(ows_flag)
+                ows_search();
+            return 0;
+#endif
         case 0x55: // MATCH ROM
             ows_recv_data(addr, 8);
             if (errno != ONEWIRE_NO_ERROR)
@@ -352,6 +394,27 @@ uint8_t ows_wait_request(uint8_t ignore_errors)
     }
     return 0; /* Interruped */
 }
+
+#ifdef OWS_CONDSEARCH_ENABLE
+static void ows_generate_spontaneous_interrupt()
+{
+    ows_pull_bus_down();
+    for(uint8_t i = 33; i; --i) /* 33*30 = 990uS approx. */
+        ows_delay_30uS();
+    ows_release_bus();
+    ows_delay_30uS();
+    ows_presence();
+}
+
+void ows_set_flag(enum ows_flag_type f)
+{
+    ows_flag = (ows_flag & ~OWS_FLAG_MASK) | (f & OWS_FLAG_MASK);
+#ifdef OWS_INTERRUPTS_ENABLE
+    if(f & OWS_FLAG_INT_TYPE1 && (ows_flag && OWS_FLAG_INTERRUPT_POSSIBLE))
+        ows_generate_spontaneous_interrupt();
+#endif
+}
+#endif
 
 /*
  vim: ts=4 sw=4 sts=4 et
