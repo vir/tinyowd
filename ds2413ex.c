@@ -33,7 +33,7 @@ void pio_send_state2()
 {
 	/* |  7    6    5    4 |  3    2    1    0  |
 	   |<complement of 3-0>|PinD PinC PinB PinA | */
-	uint8_t sample = (PIO_PORT(PIN) & ~config.debouncer_mask) | (debounced_state & config.debouncer_mask);
+	uint8_t sample = (PIO_PORT(PIN) & ~config.debouncer_mask) | (debounced_state() & config.debouncer_mask);
 	sample &= 0x1D;
 	sample = (sample >> 1) | (sample & 0x01);
 	sample |= (~sample << 4);
