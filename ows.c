@@ -280,7 +280,7 @@ void ows_send(uint8_t v)
         ows_send_bit((bitmask & v)?1:0);
 }
 
-uint8_t ows_send_data(char buf[], uint8_t len)
+uint8_t ows_send_data(const char buf[], uint8_t len)
 {
     uint8_t bytes_sended = 0;
 
@@ -354,7 +354,7 @@ PORTB&=~0x18;
 #endif /* OWS_WRITE_ROM_ENABLE */
 #ifdef OWS_CONDSEARCH_ENABLE
         case 0xEC: // CONDITIONAL SEARCH
-            if(ows_flag)
+            if(ows_flag & OWS_FLAG_CONDSEARCH)
                 ows_search();
             return 0;
 #endif
@@ -365,6 +365,9 @@ PORTB&=~0x18;
             for (int i=0; i<8; i++)
                 if (ows_rom[i] != addr[i])
                     return 0;
+#ifdef OWS_CONDSEARCH_ENABLE
+            ows_flag = 0;
+#endif
             return 1;
         case 0xCC: // SKIP ROM
             return 1;
