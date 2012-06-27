@@ -61,8 +61,12 @@ enum ows_error_code {
 uint8_t ows_wait_request(uint8_t ignore_errors);
 void ows_setup(char * rom);
 void ows_setup2(uint8_t family, uint16_t eeprom_addr);
+uint8_t ows_crc8(char* data, uint8_t len);
 uint8_t ows_recv();
+uint8_t ows_recv_data(char buf[], uint8_t len);
 void ows_send(uint8_t v);
+uint8_t ows_send_data(const char buf[], uint8_t len);
+
 extern uint8_t errno;
 
 #endif /* OWS_H_INCLUDED */
