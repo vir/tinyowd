@@ -36,9 +36,9 @@ inline uint8_t ows_read_bus()
     return (OWPORT(PIN) & OWMASK) ? 1 : 0;
 }
 
-inline void ows_delay_30uS() // delayMicroseconds(30)
+inline void ows_delay_15uS() // delayMicroseconds(15)
 {
-    uint16_t us = (30L * CLK_FREQ) / 4L / 1000L;
+    uint16_t us = (15L * CLK_FREQ) / 4L / 1000L;
     // account for the time taken in the preceeding commands.
     us -= 2;
 
@@ -47,6 +47,11 @@ inline void ows_delay_30uS() // delayMicroseconds(30)
         "1: sbiw %0,1" "\n\t" // 2 cycles
         "brne 1b" : "=w" (us) : "0" (us) // 2 cycles
     );
+}
+inline void ows_delay_30uS() // delayMicroseconds(30)
+{
+    ows_delay_15uS();
+    ows_delay_15uS();
 }
 
 volatile int16_t ows_timestamp;
@@ -137,6 +142,9 @@ void ows_setup2(uint8_t family, uint16_t eeprom_addr)
 #endif
 }
 
+uint8_t ows_presence();
+uint8_t ows_in_reset();
+
 uint8_t ows_wait_reset() {
     errno = ONEWIRE_NO_ERROR;
     ows_release_bus(); /* just in case */
@@ -151,32 +159,35 @@ uint8_t ows_wait_reset() {
         errno = ONEWIRE_INTERRUPTED;
         return 0;
     }
+    return ows_in_reset();
+}
 
-    ows_timer_start(uS_TO_TIMER_COUNTS(540 - (117UL*8000UL/CLK_FREQ))); /* it gets ~117uS to wake up tiny45! */
-#ifdef OWS_INTERRUPTS_ENABLE /* TODO: Generate "TYPE2 interrupt" here */
+uint8_t ows_in_reset()
+{
+    /* if just woken up: it gets ~117uS to wake up tiny45! */
+    /* if from recv_bit: ~120uS alrealy passed */
+    /* new experiment: ~170uS passed */
+    ows_timer_start(uS_TO_TIMER_COUNTS(540 - 170 /* (120UL*8000UL/CLK_FREQ) */));
+#ifdef OWS_INTERRUPTS_ENABLE
     if(ows_flag & OWS_FLAG_INT_TYPE2) {
         /* extend reset up to 960..4800uS */
         while (ows_read_bus() == 0) {
             if (ows_timer_read() > uS_TO_TIMER_COUNTS(540 - 400)) {
                 ows_pull_bus_down();
+                ows_timer_stop();
                 for(uint8_t i = 20; i; --i) /* 400 + 20*30 = 1mS approx. */
                     ows_delay_30uS();
                 ows_release_bus();
                 ows_delay_30uS();
-                return 0;
+                return 1;
             }
         }
     } else
-#endif
+#endif /* OWS_INTERRUPTS_ENABLE */
     {
         while (ows_read_bus() == 0) {
             if (ows_timer_read() <= 0) {
-#if 0 /* too long reset error makes too litle sense */
-                errno = ONEWIRE_VERY_LONG_RESET;
-                return 0;
-#else
                 ows_timer_stop();
-#endif
             }
         }
     }
@@ -185,10 +196,11 @@ uint8_t ows_wait_reset() {
         return 0;
     }
     ows_delay_30uS();
-    return 1;
+    return ows_presence();
 }
 
-uint8_t ows_presence() {
+uint8_t ows_presence()
+{
     errno = ONEWIRE_NO_ERROR;
     ows_pull_bus_down();
     // 120uS delay
@@ -209,20 +221,25 @@ uint8_t ows_presence() {
 
 uint8_t ows_wait_time_slot()
 {
+    //arrive here just afer data sampling (1) or after releasing bus (0)
 // CLK_FREQ in kHz, timeout in uS, 7 clocks per one 'while' cicle
 #define TIMESLOT_WAIT_RETRY_COUNT \
   ((TIMESLOT_WAIT_TIMEOUT * CLK_FREQ) / 7L / 1000L)
     uint16_t retries;
 
-    retries = TIMESLOT_WAIT_RETRY_COUNT;
+    retries = TIMESLOT_WAIT_RETRY_COUNT; //shoud be 49uS, not 120
     while (! ows_read_bus())
-        if (--retries == 0)
+        if (--retries == 0) {
+            errno = ONEWIRE_TOO_LONG_PULSE;
             return 0;
+        }
 #if OWS_ENABLE_TIMESLOT_TIMEOUT
     retries = TIMESLOT_WAIT_RETRY_COUNT;
     while ( ows_read_bus())
-        if (--retries == 0)
+        if (--retries == 0) {
+            errno = ONEWIRE_TIMESLOT_TIMEOUT;
             return 0;
+    }
 #else
     while (ows_read_bus())
         ;
@@ -236,11 +253,9 @@ uint8_t ows_recv_bit(void)
     uint8_t r;
 
     ows_release_bus();
-    if (!ows_wait_time_slot() ) {
-        errno = ONEWIRE_READ_TIMESLOT_TIMEOUT;
+    if (!ows_wait_time_slot() )
         return 0;
-    }
-    ows_delay_30uS();
+    ows_delay_15uS();
     r = ows_read_bus();
     return r;
 }
@@ -259,10 +274,8 @@ uint8_t ows_recv()
 void ows_send_bit(uint8_t v)
 {
     ows_release_bus();
-    if (!ows_wait_time_slot() ) {
-        errno = ONEWIRE_WRITE_TIMESLOT_TIMEOUT;
+    if (!ows_wait_time_slot() )
         return;
-    }
     if (v & 1)
         ows_delay_30uS();
     else {
@@ -282,15 +295,12 @@ void ows_send(uint8_t v)
 
 uint8_t ows_send_data(const char buf[], uint8_t len)
 {
-    uint8_t bytes_sended = 0;
-
-    for (int i=0; i<len; i++) {
+    for (uint8_t i = 0; i < len; ++i) {
         ows_send(buf[i]);
         if (errno != ONEWIRE_NO_ERROR)
-            break;
-        bytes_sended++;
+            return i;
     }
-    return bytes_sended;
+    return len;
 }
 
 uint8_t ows_search() {
@@ -344,11 +354,8 @@ uint8_t ows_recv_process_cmd() {
                 return 0;
             if (addr[0] != ows_rom[0] || addr[7] != ows_crc8(addr, 7))
                 return 0;
-DDRB|=0x18;
-PORTB|=0x18;
-	    eeprom_busy_wait();
+            eeprom_busy_wait();
             eeprom_write_block(&addr[1], (void*)ows_eeprom_addr, 6);
-PORTB&=~0x18;
             ows_send_data(ows_rom, 8);
             return 0;
 #endif /* OWS_WRITE_ROM_ENABLE */
@@ -380,18 +387,22 @@ PORTB&=~0x18;
     }
 }
 
-uint8_t ows_wait_request(uint8_t ignore_errors)
+uint8_t ows_wait_request()
 {
     errno = ONEWIRE_NO_ERROR;
     while(errno != ONEWIRE_INTERRUPTED) {
-        if (!ows_wait_reset() )
-            continue;
-        if (!ows_presence() )
-            continue;
+        if (! ows_wait_reset()) {
+            if(errno == ONEWIRE_INTERRUPTED)
+                return 0;
+            else
+                continue;
+        }
         if (ows_recv_process_cmd() )
             return 1;
-        else if ((errno == ONEWIRE_NO_ERROR) || ignore_errors)
+        else if (errno == ONEWIRE_NO_ERROR)
             continue;
+        else if (errno == ONEWIRE_TOO_LONG_PULSE)
+            ows_in_reset();
         else
             return 0;
     }
@@ -412,12 +423,12 @@ static void ows_generate_spontaneous_interrupt()
 void ows_set_flag(enum ows_flag_type f)
 {
     ows_flag = (ows_flag & ~OWS_FLAG_MASK) | (f & OWS_FLAG_MASK);
-#ifdef OWS_INTERRUPTS_ENABLE
+# ifdef OWS_INTERRUPTS_ENABLE
     if(f & OWS_FLAG_INT_TYPE1 && (ows_flag && OWS_FLAG_INTERRUPT_POSSIBLE))
         ows_generate_spontaneous_interrupt();
-#endif
+# endif
 }
-#endif
+#endif /* OWS_CONDSEARCH_ENABLE */
 
 /*
  vim: ts=4 sw=4 sts=4 et

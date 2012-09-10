@@ -49,16 +49,15 @@ void ows_set_flag(enum ows_flag_type f);
 
 enum ows_error_code {
     ONEWIRE_NO_ERROR = 0,
-    ONEWIRE_READ_TIMESLOT_TIMEOUT  = 1,
-    ONEWIRE_WRITE_TIMESLOT_TIMEOUT = 2,
+    ONEWIRE_TIMESLOT_TIMEOUT       = 1,
     /*ONEWIRE_WAIT_RESET_TIMEOUT     = 3,*/
-    ONEWIRE_VERY_LONG_RESET        = 4,
     ONEWIRE_VERY_SHORT_RESET       = 5,
     ONEWIRE_PRESENCE_LOW_ON_LINE   = 6,
     ONEWIRE_INTERRUPTED            = 7,
+    ONEWIRE_TOO_LONG_PULSE         = 8,
 };
 
-uint8_t ows_wait_request(uint8_t ignore_errors);
+uint8_t ows_wait_request();
 void ows_setup(char * rom);
 void ows_setup2(uint8_t family, uint16_t eeprom_addr);
 uint8_t ows_crc8(char* data, uint8_t len);
