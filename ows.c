@@ -9,6 +9,9 @@
 #include <avr/pgmspace.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
+#ifdef OWS_SPM_ENABLE
+#include "ows_spm.h"
+#endif
 
 // ows private data
 char ows_rom[8];
@@ -364,6 +367,11 @@ uint8_t ows_recv_process_cmd() {
             if(ows_flag & OWS_FLAG_CONDSEARCH)
                 ows_search();
             return 0;
+#endif
+#ifdef OWS_SPM_ENABLE
+        case 0xDA:
+            ows_spm();
+            break;
 #endif
         case 0x55: // MATCH ROM
             ows_recv_data(addr, 8);
