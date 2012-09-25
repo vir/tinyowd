@@ -151,7 +151,7 @@ char bus_send_byte(char c)
 			uint8_t b0 = bus_send_bit(1); /* read first */
 			uint8_t b1 = bus_send_bit(1); /* read second */
 			uint8_t b2 =
-				(!(b0 | b1)/*conflict*/) ? c >> (i + 1) :
+				(!(b0 | b1)/*conflict*/) ? (c >> (i + 1))&0x01 :
 				(!(b0 & b1)/*1 response*/) ? b0 :
 				1; /* no response */
 			b2 = bus_send_bit(b2);
