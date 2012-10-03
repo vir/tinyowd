@@ -9,9 +9,6 @@
 #include <avr/pgmspace.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
-#ifdef OWS_SPM_ENABLE
-#include "ows_spm.h"
-#endif
 
 // ows private data
 char ows_rom[8];
@@ -39,11 +36,11 @@ inline uint8_t ows_read_bus()
     return (OWPORT(PIN) & OWMASK) ? 1 : 0;
 }
 
-inline void ows_delay_15uS() // delayMicroseconds(15)
+static void ows_delay_15uS() // delayMicroseconds(15)
 {
     uint16_t us = (15L * CLK_FREQ) / 4L / 1000L;
     // account for the time taken in the preceeding commands.
-    us -= 2;
+    us -= 2 + 4 /* 4 for rcall */;
 
     // busy wait
     __asm__ __volatile__ (
@@ -64,9 +61,9 @@ inline void ows_timer_start(int16_t timeout)
   TCCR0A = 0x00; // Normal mode
   TCCR0B = 0x03; // clk/64
 #ifdef TIMSK0
-  TIMSK0 = 0x00; // disable timer interrupts
+  TIMSK0 &= ~(1<<OCIE0A | 1<<OCIE0B | 1<<TOIE0); // disable timer 0 interrupts
 #else
-  TIMSK = 0x00; // disable timer interrupts
+  TIMSK &= ~(1<<OCIE0A | 1<<OCIE0B | 1<<TOIE0); // disable timer 0 interrupts
 #endif
   TCNT0 = 0; // count register
 }
@@ -149,6 +146,8 @@ uint8_t ows_presence();
 uint8_t ows_in_reset();
 
 uint8_t ows_wait_reset() {
+    if(errno == ONEWIRE_TOO_LONG_PULSE)
+        return ows_in_reset();
     errno = ONEWIRE_NO_ERROR;
     ows_release_bus(); /* just in case */
     OWPCMSK |= OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
@@ -247,6 +246,9 @@ uint8_t ows_wait_time_slot()
     while (ows_read_bus())
         ;
 #endif /* OWS_ENABLE_TIMESLOT_TIMEOUT */
+#ifdef OWS_CONDSEARCH_ENABLE
+    ows_flag &= ~OWS_FLAG_INTERRUPT_POSSIBLE;
+#endif
     return 1;
 #undef TIMESLOT_WAIT_RETRY_COUNT
 }
@@ -346,6 +348,7 @@ uint8_t ows_recv_process_cmd() {
             ows_search();
             return 0;
         case 0x33: // READ ROM
+        case 0x0F:
             ows_send_data(ows_rom, 8);
             if (errno != ONEWIRE_NO_ERROR)
                 return 0;
@@ -353,12 +356,15 @@ uint8_t ows_recv_process_cmd() {
 #ifdef OWS_WRITE_ROM_ENABLE
         case 0xD5: // WRITE ROM
             ows_recv_data(addr, 8);
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
-            if (addr[0] != ows_rom[0] || addr[7] != ows_crc8(addr, 7))
-                return 0;
-            eeprom_busy_wait();
-            eeprom_write_block(&addr[1], (void*)ows_eeprom_addr, 6);
+            if(errno == ONEWIRE_NO_ERROR
+                && addr[0] == ows_rom[0]
+                && addr[7] == ows_crc8(addr, 7))
+            {
+                eeprom_busy_wait();
+                eeprom_write_block(&addr[1], (void*)ows_eeprom_addr, 6);
+                for(uint8_t i = 0; i < 8; ++i)
+                    ows_rom[i] = addr[i];
+            }
             ows_send_data(ows_rom, 8);
             return 0;
 #endif /* OWS_WRITE_ROM_ENABLE */
@@ -367,11 +373,6 @@ uint8_t ows_recv_process_cmd() {
             if(ows_flag & OWS_FLAG_CONDSEARCH)
                 ows_search();
             return 0;
-#endif
-#ifdef OWS_SPM_ENABLE
-        case 0xDA:
-            ows_spm();
-            break;
 #endif
         case 0x55: // MATCH ROM
             ows_recv_data(addr, 8);
@@ -399,18 +400,17 @@ uint8_t ows_wait_request()
 {
     errno = ONEWIRE_NO_ERROR;
     while(errno != ONEWIRE_INTERRUPTED) {
-        if (! ows_wait_reset()) {
-            if(errno == ONEWIRE_INTERRUPTED)
-                return 0;
-            else
-                continue;
-        }
+        if (! ows_wait_reset())
+            continue;
+#ifdef OWS_CONDSEARCH_ENABLE
+	ows_flag |= OWS_FLAG_INTERRUPT_POSSIBLE;
+#endif
         if (ows_recv_process_cmd() )
             return 1;
         else if (errno == ONEWIRE_NO_ERROR)
             continue;
         else if (errno == ONEWIRE_TOO_LONG_PULSE)
-            ows_in_reset();
+            continue; // will be checked in wait_reset()
         else
             return 0;
     }
