@@ -5,6 +5,9 @@
 #include "debounce.h"
 #include <string.h> /* for memcpy */
 #include <avr/eeprom.h>
+#ifdef OWS_SPM_ENABLE
+# include "ows_spm.h"
+#endif
 
 /*
  * 0 - PioA
@@ -16,11 +19,9 @@
 static struct {
 	uint8_t debouncer_mask;
 	uint8_t int_mask;
-	uint8_t padding[6];
-} config = {
-	0x00,
-	0x00,
-};
+	uint8_t int_type;
+	uint8_t padding[5];
+} config;
 
 void pio_send_state()
 {
@@ -66,7 +67,7 @@ void pio_write()
 		cfm = ~ows_recv();
 		if(cfm != data)
 			break;
-		data = ~((data & 0x01) | ((data &0x02) << 1));
+		data = (cfm & 0x01) | ((cfm &0x02) << 1);
 		data |= PIO_PORT(DDR) & ~0x05;
 		PIO_PORT(DDR) = data;
 		ows_send(0xAA);
@@ -74,12 +75,26 @@ void pio_write()
 	}
 }
 
-ISR(TIM0_COMPA_vect) {
-	uint8_t c = debounce(PIO_PORT(PIN));
-#if 0 /* fix compilation temporary */
-	if(c & config.int_mask)
-		ows_interrupt();
-#endif
+void pio_write2()
+{
+	uint8_t data, cfm;
+	while(! errno)
+	{
+	/* |  7    6    5    4 |  3    2    1    0  |
+	   |  x    x    x    x |OutD OutC OutB OutA | */
+		data = ows_recv();
+		cfm = ~ows_recv();
+		if(cfm != data)
+			break;
+		data = (cfm & 0x01) | ((cfm & 0x0E) << 1);
+		data |= PIO_PORT(DDR) & ~0x1D;
+		PIO_PORT(DDR) = data;
+		ows_send(0xAA);
+		pio_send_state2();
+	}
+}
+
+ISR(TIM1_COMPA_vect) { /* occurs every 100uS */
 }
 
 int main()
@@ -92,15 +107,19 @@ int main()
 	ows_setup2(0x3A, 0);
 	eeprom_read_block(&config, (const void*)6, sizeof(config));
 	PIO_PORT(PORT) = 0;
+
+	/* set up timer 1 */
+	TCCR1 = 1<<CTC1 | 0x04; /* CTC mode, prescaler = 4 (clk/8) */
+	GTCCR = 0;
+	OCR1A = 0; // interrupt on 0
+	OCR1C = CLK_FREQ / 80; /* 1/(9.6E6/8)*120=100uS period: OCR0A = 100 * CLK_FREQ / 1000 / 8 */
+	TIMSK |= 1<<OCIE1A; /* interrupt on compare match */
+	PLLCSR = 0;
+
 	for(;;)
 	{
 		if(ows_wait_request(0))
 		{
-#if 0 /* echo */
-			while(! errno)
-				ows_send(ows_recv());
-			toggle_debug_led();
-#else
 			switch(ows_recv())
 			{
 			case 0xF5: /* PIO ACCESS READ */
@@ -112,16 +131,19 @@ int main()
 			case 0x5A: /* PIO ACCESS WRITE */
 				pio_write();
 				break;
-			case 0xBE: /* Read Scratchpad */
-				ows_send_data((char*)&config, 8);
-				ows_send(ows_crc8((char*)&config, 8));
+			case 0x5F: /* PIO ACCESS WRITE 2 */
+				pio_write2();
 				break;
 			case 0x4E: /* Write Scratchpad */
 				{
-					char buf[9];
-					if(sizeof(buf) == ows_recv_data(buf, sizeof(buf)) && buf[8] == ows_crc8(buf, 8))
+					char buf[sizeof(config) + 1];
+					if(sizeof(buf) == ows_recv_data(buf, sizeof(buf)) && buf[sizeof(config)] == ows_crc8(buf, sizeof(config)))
 						memcpy(&config, buf, sizeof(config));
 				}
+				/* no break! */
+			case 0xBE: /* Read Scratchpad */
+				ows_send_data((char*)&config, 8);
+				ows_send(ows_crc8((char*)&config, 8));
 				break;
 			case 0x48: /* Copy Scratchpad */
 				eeprom_write_block(&config, (void*)6, sizeof(config));
@@ -129,17 +151,21 @@ int main()
 			case 0xB8: /* Recall Scratchpad */
 				eeprom_read_block(&config, (const void*)6, sizeof(config));
 				break;
+#ifdef OWS_SPM_ENABLE
+			case 0xDA:
+				ows_spm();
+				break;
+#endif
 			default:
 				break;
 			}
-#endif
 		}
 		else if(errno == ONEWIRE_INTERRUPTED)
 		{
 			int8_t diff = debounce(PIO_PORT(PIN));
 #ifdef OWS_CONDSEARCH_ENABLE
 			if(diff & config.int_mask)
-				ows_set_flag(OWS_FLAG_CONDSEARCH | OWS_FLAG_INT_TYPE1 | OWS_FLAG_INT_TYPE2);
+				ows_set_flag(OWS_FLAG_CONDSEARCH | (config.int_type & (OWS_FLAG_INT_TYPE1 | OWS_FLAG_INT_TYPE2)));
 #endif
 		}
 	}
