@@ -10,10 +10,11 @@
 #endif
 
 /*
- * 0 - PioA
- * 2 - PioB
- * 3 - PioC
- * 4 - PioD
+ * b0 - PioA
+ * b1 - PioB
+ * b2 - PioC
+ * b3 - PioD
+ * b4 - 1wire bus
  */
 
 static struct {
@@ -27,9 +28,11 @@ void pio_send_state()
 {
 	/* |  7    6    5    4 |  3    2    1    0  |
 	   |<complement of 3-0>|OutB PinB OutA PinA | */
-	uint8_t sample = PIO_PORT(PIN) & 0x05;
+	uint8_t sample = PIO_PORT(PIN) & 0x03;
+	sample = ((sample & 0x02) << 1) | (sample & 0x01);
 	/* output values is inversion of direction register */
-	sample |= (((~PIO_PORT(DDR)) & 0x05) << 1);
+	sample |= ((PIO_PORT(DDR) & 0x02) << 2); /* OutB */
+	sample |= ((PIO_PORT(DDR) & 0x01) << 1); /* OutA */
 	sample |= (~sample << 4);
 	ows_send(sample);
 }
@@ -39,8 +42,7 @@ void pio_send_state2()
 	/* |  7    6    5    4 |  3    2    1    0  |
 	   |<complement of 3-0>|PinD PinC PinB PinA | */
 	uint8_t sample = (PIO_PORT(PIN) & ~config.debouncer_mask) | (debounced_state & config.debouncer_mask);
-	sample &= 0x1D;
-	sample = (sample >> 1) | (sample & 0x01);
+	sample &= 0x0F;
 	sample |= (~sample << 4);
 	ows_send(sample);
 }
@@ -67,8 +69,8 @@ void pio_write()
 		cfm = ~ows_recv();
 		if(cfm != data)
 			break;
-		data = (cfm & 0x01) | ((cfm &0x02) << 1);
-		data |= PIO_PORT(DDR) & ~0x05;
+		data = cfm & 0x03;
+		data |= PIO_PORT(DDR) & ~0x03;
 		PIO_PORT(DDR) = data;
 		ows_send(0xAA);
 		pio_send_state();
@@ -86,8 +88,8 @@ void pio_write2()
 		cfm = ~ows_recv();
 		if(cfm != data)
 			break;
-		data = (cfm & 0x01) | ((cfm & 0x0E) << 1);
-		data |= PIO_PORT(DDR) & ~0x1D;
+		data = cfm & 0x0F;
+		data |= PIO_PORT(DDR) & 0xF0;
 		PIO_PORT(DDR) = data;
 		ows_send(0xAA);
 		pio_send_state2();
@@ -143,7 +145,8 @@ int main()
 				/* no break! */
 			case 0xBE: /* Read Scratchpad */
 				ows_send_data((char*)&config, 8);
-				ows_send(ows_crc8((char*)&config, 8));
+				if(errno == ONEWIRE_NO_ERROR)
+					ows_send(ows_crc8((char*)&config, 8));
 				break;
 			case 0x48: /* Copy Scratchpad */
 				eeprom_write_block(&config, (void*)6, sizeof(config));
@@ -164,7 +167,19 @@ int main()
 		{
 			int8_t diff = debounce(PIO_PORT(PIN));
 #ifdef OWS_CONDSEARCH_ENABLE
-			if(diff & config.int_mask)
+/*
+                             ,----------- and --------+--> any
+                             |         ,-/             > or ----- and --> interrupt
+        l = int_mask(n)    --|-- not --+-- or -- not -+--> edge  /
+        h = int_mask(n+4)  --+-- xor -----/                      |
+        s = state(n)       -----/                                |
+        d = diff           --------------------------------------'
+
+*/
+			int8_t s = debounced_state;
+			int8_t h = config.int_mask >> 4;
+			int8_t il = ~config.int_mask & 0x0F;
+			if( ((il & h) | ~((s ^ h) | il)) & diff )
 				ows_set_flag(OWS_FLAG_CONDSEARCH | (config.int_type & (OWS_FLAG_INT_TYPE1 | OWS_FLAG_INT_TYPE2)));
 #endif
 		}

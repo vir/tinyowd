@@ -10,6 +10,10 @@
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
 
+struct {
+    int rc:1; /* resume flag */
+} ows_flags;
+
 // ows private data
 char ows_rom[8];
 uint8_t errno;
@@ -120,6 +124,7 @@ void ows_setup(char * rom)
 #ifdef OWS_CONDSEARCH_ENABLE
     ows_flag = 0;
 #endif
+    *(uint8_t*)&ows_flags = 0;
 }
 
 void ows_setup2(uint8_t family, uint16_t eeprom_addr)
@@ -140,6 +145,7 @@ void ows_setup2(uint8_t family, uint16_t eeprom_addr)
 #ifdef OWS_CONDSEARCH_ENABLE
     ows_flag = 0;
 #endif
+    *(uint8_t*)&ows_flags = 0;
 }
 
 uint8_t ows_presence();
@@ -311,12 +317,16 @@ uint8_t ows_send_data(const char buf[], uint8_t len)
 uint8_t ows_search() {
     uint8_t bitmask;
     uint8_t bit_send, bit_recv;
-
+    ows_flags.rc = 0;
     for (int i=0; i<8; i++) {
         for (bitmask = 0x01; bitmask; bitmask <<= 1) {
             bit_send = (bitmask & ows_rom[i])?1:0;
             ows_send_bit(bit_send);
+            if (errno != ONEWIRE_NO_ERROR)
+                return 0;
             ows_send_bit(!bit_send);
+            if (errno != ONEWIRE_NO_ERROR)
+                return 0;
             bit_recv = ows_recv_bit();
             if (errno != ONEWIRE_NO_ERROR)
                 return 0;
@@ -324,6 +334,7 @@ uint8_t ows_search() {
                 return 0;
         }
     }
+    ows_flags.rc = 1;
     return 1;
 }
 
@@ -341,12 +352,10 @@ uint8_t ows_recv_data(char buf[], uint8_t len) {
 
 uint8_t ows_recv_process_cmd() {
     char addr[8];
-
     for (;;) {
       switch (ows_recv() ) {
         case 0xF0: // SEARCH ROM
-            ows_search();
-            return 0;
+            return ows_search();
         case 0x33: // READ ROM
         case 0x0F:
             ows_send_data(ows_rom, 8);
@@ -371,10 +380,10 @@ uint8_t ows_recv_process_cmd() {
 #ifdef OWS_CONDSEARCH_ENABLE
         case 0xEC: // CONDITIONAL SEARCH
             if(ows_flag & OWS_FLAG_CONDSEARCH)
-                ows_search();
-            return 0;
+                return ows_search();
 #endif
         case 0x55: // MATCH ROM
+            ows_flags.rc = 0;
             ows_recv_data(addr, 8);
             if (errno != ONEWIRE_NO_ERROR)
                 return 0;
@@ -384,9 +393,12 @@ uint8_t ows_recv_process_cmd() {
 #ifdef OWS_CONDSEARCH_ENABLE
             ows_flag = 0;
 #endif
+            ows_flags.rc = 1;
             return 1;
         case 0xCC: // SKIP ROM
             return 1;
+        case 0xA5: // RESUME
+            return ows_flags.rc;
         default: // Unknow command
             if (errno == ONEWIRE_NO_ERROR)
                 break; // skip if no error

@@ -27,10 +27,10 @@
 #elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__)
 # warning ===== Configured for ATTiny(25,45,85) =====
 # define CLK_FREQ 8000L
-# define OWMASK 0x02
+# define OWMASK 0x10
 # define OWPORT(x) x##B
 # define OWPCMSK PCMSK
-# define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) */
+# define PIO_PORT(p) (p##B) /* hardcoded pins b0(A), b1(B), b2(C), b3(D) */
 #else
 # error Unsupported MCU
 #endif
