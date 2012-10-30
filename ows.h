@@ -7,7 +7,7 @@
 
 /* check predefines with << avr-cpp -dM -mmcu=atmega168 ows.c | grep -i avr >> */
 #if defined(__AVR_ATmega168__)
-# warning ===== Configured for ATMega168 =====
+# pragma message ===== Configured for ATMega168 =====
 /* Arduino Nano:
  Arduino pin:   D0 .. D7    D8 .. D13   A0 .. A5    A6    A7
  ATMega port:  PD0 .. PD7  PB0 .. PB5  PC0 .. PC5  ADC6  ADC7
@@ -18,14 +18,14 @@
 # define OWPCMSK PCMSK2 /* PCMSK0 - Port B, PCMSK1 - Port C, PCMSK2 - Port D */
 # define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) ==> pins 8 and 10 on Arduino nano */
 #elif defined(__AVR_ATtiny13__)
-# warning ===== Configured for ATTiny(13) =====
+# pragma message ===== Configured for ATTiny(13) =====
 # define CLK_FREQ 9600L
 # define OWMASK 0x02
 # define OWPORT(x) x##B
 # define OWPCMSK PCMSK
 # define PIO_PORT(p) (p##B) /* hardcoded pins 0(A) and 2(B) */
 #elif defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__)
-# warning ===== Configured for ATTiny(25,45,85) =====
+# pragma message ===== Configured for ATTiny(25,45,85) =====
 # define CLK_FREQ 8000L
 # define OWMASK 0x10
 # define OWPORT(x) x##B
@@ -62,9 +62,13 @@ void ows_setup(char * rom);
 void ows_setup2(uint8_t family, uint16_t eeprom_addr);
 uint8_t ows_crc8(char* data, uint8_t len);
 uint8_t ows_recv();
-uint8_t ows_recv_data(char buf[], uint8_t len);
+void ows_recv_data(char buf[], uint8_t len);
 void ows_send(uint8_t v);
-uint8_t ows_send_data(const char buf[], uint8_t len);
+void ows_send_data(const char buf[], uint8_t len);
+
+/* override to add functionality */
+void ows_process_cmds();
+void ows_process_interrupt();
 
 extern uint8_t errno;
 

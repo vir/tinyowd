@@ -118,54 +118,71 @@ int main()
 	TIMSK |= 1<<OCIE1A; /* interrupt on compare match */
 	PLLCSR = 0;
 
+#if 0
 	for(;;)
 	{
 		if(ows_wait_request(0))
 		{
-			switch(ows_recv())
-			{
-			case 0xF5: /* PIO ACCESS READ */
-				pio_read();
-				break;
-			case 0xFA: /* PIO ACCESS READ 2 */
-				pio_read2();
-				break;
-			case 0x5A: /* PIO ACCESS WRITE */
-				pio_write();
-				break;
-			case 0x5F: /* PIO ACCESS WRITE 2 */
-				pio_write2();
-				break;
-			case 0x4E: /* Write Scratchpad */
-				{
-					char buf[sizeof(config) + 1];
-					if(sizeof(buf) == ows_recv_data(buf, sizeof(buf)) && buf[sizeof(config)] == ows_crc8(buf, sizeof(config)))
-						memcpy(&config, buf, sizeof(config));
-				}
-				/* no break! */
-			case 0xBE: /* Read Scratchpad */
-				ows_send_data((char*)&config, 8);
-				if(errno == ONEWIRE_NO_ERROR)
-					ows_send(ows_crc8((char*)&config, 8));
-				break;
-			case 0x48: /* Copy Scratchpad */
-				eeprom_write_block(&config, (void*)6, sizeof(config));
-				break;
-			case 0xB8: /* Recall Scratchpad */
-				eeprom_read_block(&config, (const void*)6, sizeof(config));
-				break;
-#ifdef OWS_SPM_ENABLE
-			case 0xDA:
-				ows_spm();
-				break;
-#endif
-			default:
-				break;
-			}
+			ows_process_cmds();
 		}
 		else if(errno == ONEWIRE_INTERRUPTED)
 		{
-			int8_t diff = debounce(PIO_PORT(PIN));
+			ows_process_interrupt();
+		}
+	}
+#else
+	for(;;)
+		ows_wait_request();
+#endif
+}
+
+void ows_process_cmds()
+{
+	switch(ows_recv())
+	{
+	case 0xF5: /* PIO ACCESS READ */
+		pio_read();
+		break;
+	case 0xFA: /* PIO ACCESS READ 2 */
+		pio_read2();
+		break;
+	case 0x5A: /* PIO ACCESS WRITE */
+		pio_write();
+		break;
+	case 0x5F: /* PIO ACCESS WRITE 2 */
+		pio_write2();
+		break;
+	case 0x4E: /* Write Scratchpad */
+		{
+			char buf[sizeof(config) + 1];
+			ows_recv_data(buf, sizeof(buf));
+			if(buf[sizeof(config)] == ows_crc8(buf, sizeof(config)))
+				memcpy(&config, buf, sizeof(config));
+		}
+		/* no break! */
+	case 0xBE: /* Read Scratchpad */
+		ows_send_data((char*)&config, 8);
+			ows_send(ows_crc8((char*)&config, 8));
+		break;
+	case 0x48: /* Copy Scratchpad */
+		eeprom_write_block(&config, (void*)6, sizeof(config));
+		break;
+	case 0xB8: /* Recall Scratchpad */
+		eeprom_read_block(&config, (const void*)6, sizeof(config));
+		break;
+#ifdef OWS_SPM_ENABLE
+	case 0xDA:
+		ows_spm();
+		break;
+#endif
+	default:
+		break;
+	}
+}
+
+void ows_process_interrupt()
+{
+	int8_t diff = debounce(PIO_PORT(PIN));
 #ifdef OWS_CONDSEARCH_ENABLE
 /*
                              ,----------- and --------+--> any
@@ -176,14 +193,11 @@ int main()
         d = diff           --------------------------------------'
 
 */
-			int8_t s = debounced_state;
-			int8_t h = config.int_mask >> 4;
-			int8_t il = ~config.int_mask & 0x0F;
-			if( ((il & h) | ~((s ^ h) | il)) & diff )
-				ows_set_flag(OWS_FLAG_CONDSEARCH | (config.int_type & (OWS_FLAG_INT_TYPE1 | OWS_FLAG_INT_TYPE2)));
+	int8_t s = debounced_state;
+	int8_t h = config.int_mask >> 4;
+	int8_t il = ~config.int_mask & 0x0F;
+	if( ((il & h) | ~((s ^ h) | il)) & diff )
+		ows_set_flag(OWS_FLAG_CONDSEARCH | (config.int_type & (OWS_FLAG_INT_TYPE1 | OWS_FLAG_INT_TYPE2)));
 #endif
-		}
-	}
 }
-
 

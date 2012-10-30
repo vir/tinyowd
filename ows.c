@@ -9,9 +9,13 @@
 #include <avr/pgmspace.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
+#include <setjmp.h>
+
+static jmp_buf err;
 
 struct {
     int rc:1; /* resume flag */
+    int wait_reset:1;
 } ows_flags;
 
 // ows private data
@@ -125,6 +129,7 @@ void ows_setup(char * rom)
     ows_flag = 0;
 #endif
     *(uint8_t*)&ows_flags = 0;
+    ows_flags.wait_reset = 1;
 }
 
 void ows_setup2(uint8_t family, uint16_t eeprom_addr)
@@ -146,31 +151,31 @@ void ows_setup2(uint8_t family, uint16_t eeprom_addr)
     ows_flag = 0;
 #endif
     *(uint8_t*)&ows_flags = 0;
+    ows_flags.wait_reset = 1;
 }
 
-uint8_t ows_presence();
-uint8_t ows_in_reset();
+void ows_presence();
+void ows_in_reset();
 
-uint8_t ows_wait_reset() {
-    if(errno == ONEWIRE_TOO_LONG_PULSE)
-        return ows_in_reset();
-    errno = ONEWIRE_NO_ERROR;
-    ows_release_bus(); /* just in case */
-    OWPCMSK |= OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
-    if(ows_read_bus()) {
-        sei();
-        sleep_cpu();
-        cli();
+void ows_wait_reset() {
+    if(errno != ONEWIRE_TOO_LONG_PULSE)
+    {
+        errno = ONEWIRE_NO_ERROR;
+        ows_release_bus(); /* just in case */
+        OWPCMSK |= OWMASK; /* enable pin change interrupt here, global interrupts are still disabled */
+        if(ows_read_bus()) {
+            sei();
+            sleep_cpu();
+            cli();
+        }
+        OWPCMSK &= ~OWMASK; /* disable pin change interrupt here, global interrupts are still disabled */
+        if(ows_read_bus())
+            longjmp(err, ONEWIRE_INTERRUPTED);
     }
-    OWPCMSK &= ~OWMASK; /* disable pin change interrupt here, global interrupts are still disabled */
-    if(ows_read_bus()) {
-        errno = ONEWIRE_INTERRUPTED;
-        return 0;
-    }
-    return ows_in_reset();
+    ows_in_reset();
 }
 
-uint8_t ows_in_reset()
+void ows_in_reset()
 {
     /* if just woken up: it gets ~117uS to wake up tiny45! */
     /* if from recv_bit: ~120uS alrealy passed */
@@ -187,7 +192,7 @@ uint8_t ows_in_reset()
                     ows_delay_30uS();
                 ows_release_bus();
                 ows_delay_30uS();
-                return 1;
+                return;
             }
         }
     } else
@@ -199,17 +204,14 @@ uint8_t ows_in_reset()
             }
         }
     }
-    if (ows_timer_read() > uS_TO_TIMER_COUNTS(70)) {
-        errno = ONEWIRE_VERY_SHORT_RESET;
-        return 0;
-    }
+    if (ows_timer_read() > uS_TO_TIMER_COUNTS(70))
+        longjmp(err, ONEWIRE_VERY_SHORT_RESET);
     ows_delay_30uS();
-    return ows_presence();
+    ows_presence();
 }
 
-uint8_t ows_presence()
+void ows_presence()
 {
-    errno = ONEWIRE_NO_ERROR;
     ows_pull_bus_down();
     // 120uS delay
     ows_delay_30uS();
@@ -220,11 +222,8 @@ uint8_t ows_presence()
     //ows_delay(uS(300 - 25)); // XXX 25 - ?
     for(uint8_t t = 0; t < ((300 - 25)/30); ++t)
         ows_delay_30uS();
-    if (! ows_read_bus()) {
-        errno = ONEWIRE_PRESENCE_LOW_ON_LINE;
-        return 0;
-    } else
-        return 1;
+    if (! ows_read_bus())
+        longjmp(err, ONEWIRE_PRESENCE_LOW_ON_LINE);
 }
 
 uint8_t ows_wait_time_slot()
@@ -237,16 +236,13 @@ uint8_t ows_wait_time_slot()
 
     retries = TIMESLOT_WAIT_RETRY_COUNT; //shoud be 49uS, not 120
     while (! ows_read_bus())
-        if (--retries == 0) {
-            errno = ONEWIRE_TOO_LONG_PULSE;
-            return 0;
-        }
+        if (--retries == 0)
+            longjmp(err, ONEWIRE_TOO_LONG_PULSE);
 #if OWS_ENABLE_TIMESLOT_TIMEOUT
     retries = TIMESLOT_WAIT_RETRY_COUNT;
     while ( ows_read_bus())
-        if (--retries == 0) {
-            errno = ONEWIRE_TIMESLOT_TIMEOUT;
-            return 0;
+        if (--retries == 0)
+            longjmp(err, ONEWIRE_TIMESLOT_TIMEOUT);
     }
 #else
     while (ows_read_bus())
@@ -274,9 +270,7 @@ uint8_t ows_recv_bit(void)
 uint8_t ows_recv()
 {
     uint8_t r = 0;
-
-    errno = ONEWIRE_NO_ERROR;
-    for (uint8_t bitmask = 0x01; bitmask && (errno == ONEWIRE_NO_ERROR); bitmask <<= 1)
+    for (uint8_t bitmask = 0x01; bitmask; bitmask <<= 1)
         if (ows_recv_bit())
             r |= bitmask;
     return r;
@@ -299,19 +293,14 @@ void ows_send_bit(uint8_t v)
 
 void ows_send(uint8_t v)
 {
-    errno = ONEWIRE_NO_ERROR;
-    for (uint8_t bitmask = 0x01; bitmask && (errno == ONEWIRE_NO_ERROR); bitmask <<= 1)
+    for (uint8_t bitmask = 0x01; bitmask; bitmask <<= 1)
         ows_send_bit((bitmask & v)?1:0);
 }
 
-uint8_t ows_send_data(const char buf[], uint8_t len)
+void ows_send_data(const char buf[], uint8_t len)
 {
-    for (uint8_t i = 0; i < len; ++i) {
+    for (uint8_t i = 0; i < len; ++i)
         ows_send(buf[i]);
-        if (errno != ONEWIRE_NO_ERROR)
-            return i;
-    }
-    return len;
 }
 
 uint8_t ows_search() {
@@ -322,14 +311,8 @@ uint8_t ows_search() {
         for (bitmask = 0x01; bitmask; bitmask <<= 1) {
             bit_send = (bitmask & ows_rom[i])?1:0;
             ows_send_bit(bit_send);
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
             ows_send_bit(!bit_send);
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
             bit_recv = ows_recv_bit();
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
             if (bit_recv != bit_send)
                 return 0;
         }
@@ -338,16 +321,9 @@ uint8_t ows_search() {
     return 1;
 }
 
-uint8_t ows_recv_data(char buf[], uint8_t len) {
-    uint8_t bytes_received = 0;
-
-    for (int i=0; i<len; i++) {
+void ows_recv_data(char buf[], uint8_t len) {
+    for (int i=0; i<len; i++)
         buf[i] = ows_recv();
-        if (errno != ONEWIRE_NO_ERROR)
-            break;
-        bytes_received++;
-    }
-    return bytes_received;
 }
 
 uint8_t ows_recv_process_cmd() {
@@ -359,15 +335,11 @@ uint8_t ows_recv_process_cmd() {
         case 0x33: // READ ROM
         case 0x0F:
             ows_send_data(ows_rom, 8);
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
             break;
 #ifdef OWS_WRITE_ROM_ENABLE
         case 0xD5: // WRITE ROM
             ows_recv_data(addr, 8);
-            if(errno == ONEWIRE_NO_ERROR
-                && addr[0] == ows_rom[0]
-                && addr[7] == ows_crc8(addr, 7))
+            if(addr[0] == ows_rom[0] && addr[7] == ows_crc8(addr, 7))
             {
                 eeprom_busy_wait();
                 eeprom_write_block(&addr[1], (void*)ows_eeprom_addr, 6);
@@ -385,8 +357,6 @@ uint8_t ows_recv_process_cmd() {
         case 0x55: // MATCH ROM
             ows_flags.rc = 0;
             ows_recv_data(addr, 8);
-            if (errno != ONEWIRE_NO_ERROR)
-                return 0;
             for (int i=0; i<8; i++)
                 if (ows_rom[i] != addr[i])
                     return 0;
@@ -400,33 +370,38 @@ uint8_t ows_recv_process_cmd() {
         case 0xA5: // RESUME
             return ows_flags.rc;
         default: // Unknow command
-            if (errno == ONEWIRE_NO_ERROR)
-                break; // skip if no error
-            else
-                return 0;
+            return 0;
       }
     }
 }
 
+void __attribute__((weak)) ows_process_cmds() { }
+void __attribute__((weak)) ows_process_interrupt() { }
+
 uint8_t ows_wait_request()
 {
-    errno = ONEWIRE_NO_ERROR;
-    while(errno != ONEWIRE_INTERRUPTED) {
-        if (! ows_wait_reset())
-            continue;
-#ifdef OWS_CONDSEARCH_ENABLE
-	ows_flag |= OWS_FLAG_INTERRUPT_POSSIBLE;
-#endif
-        if (ows_recv_process_cmd() )
-            return 1;
-        else if (errno == ONEWIRE_NO_ERROR)
-            continue;
-        else if (errno == ONEWIRE_TOO_LONG_PULSE)
-            continue; // will be checked in wait_reset()
-        else
-            return 0;
+    switch((errno = setjmp(err)))
+    {
+        case 0:
+            if(ows_flags.wait_reset)
+                ows_wait_reset();
+            if(ows_recv_process_cmd())
+                ows_process_cmds();
+            else
+                ows_flags.wait_reset = 1;
+            break;
+        case ONEWIRE_TIMESLOT_TIMEOUT:
+        case ONEWIRE_VERY_SHORT_RESET:
+        case ONEWIRE_PRESENCE_LOW_ON_LINE:
+            break;
+        case ONEWIRE_INTERRUPTED:
+            ows_process_interrupt();
+            break;
+        case ONEWIRE_TOO_LONG_PULSE:
+            break;
+
     }
-    return 0; /* Interruped */
+    return 0;
 }
 
 #ifdef OWS_CONDSEARCH_ENABLE
