@@ -219,11 +219,13 @@ void ows_presence()
     ows_delay_30uS();
     ows_delay_30uS();
     ows_release_bus();
+#if 0 /* no reason to check this */
     //ows_delay(uS(300 - 25)); // XXX 25 - ?
     for(uint8_t t = 0; t < ((300 - 25)/30); ++t)
         ows_delay_30uS();
     if (! ows_read_bus())
         longjmp(err, ONEWIRE_PRESENCE_LOW_ON_LINE);
+#endif
 }
 
 uint8_t ows_wait_time_slot()
@@ -355,7 +357,6 @@ uint8_t ows_recv_process_cmd() {
                 return ows_search();
 #endif
         case 0x55: // MATCH ROM
-            ows_flags.rc = 0;
             ows_recv_data(addr, 8);
             for (int i=0; i<8; i++)
                 if (ows_rom[i] != addr[i])
@@ -363,7 +364,6 @@ uint8_t ows_recv_process_cmd() {
 #ifdef OWS_CONDSEARCH_ENABLE
             ows_flag = 0;
 #endif
-            ows_flags.rc = 1;
             return 1;
         case 0xCC: // SKIP ROM
             return 1;
@@ -385,7 +385,9 @@ uint8_t ows_wait_request()
         case 0:
             if(ows_flags.wait_reset)
                 ows_wait_reset();
-            if(ows_recv_process_cmd())
+            ows_flags.wait_reset = 0;
+            ows_flags.rc = ows_recv_process_cmd();
+            if(ows_flags.rc)
                 ows_process_cmds();
             else
                 ows_flags.wait_reset = 1;
@@ -393,11 +395,13 @@ uint8_t ows_wait_request()
         case ONEWIRE_TIMESLOT_TIMEOUT:
         case ONEWIRE_VERY_SHORT_RESET:
         case ONEWIRE_PRESENCE_LOW_ON_LINE:
+            ows_flags.wait_reset = 1;
             break;
         case ONEWIRE_INTERRUPTED:
             ows_process_interrupt();
             break;
         case ONEWIRE_TOO_LONG_PULSE:
+            ows_flags.wait_reset = 1;
             break;
 
     }

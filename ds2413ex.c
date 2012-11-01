@@ -101,6 +101,7 @@ ISR(TIM1_COMPA_vect) { /* occurs every 100uS */
 
 int main()
 {
+	cli();
 	wdt_disable();
 #if defined(__AVR_ATtiny85__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny13__)
 	CLKPR = 0x80; /* Clock prescaler change enable */
@@ -110,6 +111,7 @@ int main()
 	eeprom_read_block(&config, (const void*)6, sizeof(config));
 	PIO_PORT(PORT) = 0;
 
+#if 1
 	/* set up timer 1 */
 	TCCR1 = 1<<CTC1 | 0x04; /* CTC mode, prescaler = 4 (clk/8) */
 	GTCCR = 0;
@@ -117,23 +119,10 @@ int main()
 	OCR1C = CLK_FREQ / 80; /* 1/(9.6E6/8)*120=100uS period: OCR0A = 100 * CLK_FREQ / 1000 / 8 */
 	TIMSK |= 1<<OCIE1A; /* interrupt on compare match */
 	PLLCSR = 0;
+#endif
 
-#if 0
-	for(;;)
-	{
-		if(ows_wait_request(0))
-		{
-			ows_process_cmds();
-		}
-		else if(errno == ONEWIRE_INTERRUPTED)
-		{
-			ows_process_interrupt();
-		}
-	}
-#else
 	for(;;)
 		ows_wait_request();
-#endif
 }
 
 void ows_process_cmds()
