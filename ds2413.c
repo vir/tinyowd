@@ -54,31 +54,21 @@ int main()
 	ows_setup(myrom);
 	PIO_PORT(PORT) = 0;
 	for(;;)
-	{
-#if 0
-		toggle_debug_led();
-#endif
-		if(ows_wait_request(0))
-		{
-#if 0 /* echo */
-			while(! errno)
-				ows_send(ows_recv());
-			toggle_debug_led();
-#else
-			switch(ows_recv())
-			{
-			case 0xF5: /* PIO ACCESS READ */
-				pio_read();
-				break;
-			case 0x5A: /* PIO ACCESS WRITE */
-				pio_write();
-				break;
-			default:
-				break;
-			}
-#endif
-		}
-	}
+		ows_wait_request();
 }
 
+void ows_process_cmds()
+{
+	switch(ows_recv())
+	{
+	case 0xF5: /* PIO ACCESS READ */
+		pio_read();
+		break;
+	case 0x5A: /* PIO ACCESS WRITE */
+		pio_write();
+		break;
+	default:
+		break;
+	}
+}
 
