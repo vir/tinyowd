@@ -378,7 +378,7 @@ uint8_t ows_recv_process_cmd() {
 void __attribute__((weak)) ows_process_cmds() { }
 void __attribute__((weak)) ows_process_interrupt() { }
 
-uint8_t ows_wait_request()
+void ows_wait_request()
 {
     switch((errno = setjmp(err)))
     {
@@ -405,7 +405,6 @@ uint8_t ows_wait_request()
             break;
 
     }
-    return 0;
 }
 
 #ifdef OWS_CONDSEARCH_ENABLE

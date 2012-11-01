@@ -57,7 +57,7 @@ enum ows_error_code {
     ONEWIRE_TOO_LONG_PULSE         = 8,
 };
 
-uint8_t ows_wait_request();
+void ows_wait_request();
 void ows_setup(char * rom);
 void ows_setup2(uint8_t family, uint16_t eeprom_addr);
 uint8_t ows_crc8(char* data, uint8_t len);

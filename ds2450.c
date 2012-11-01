@@ -52,88 +52,86 @@ int main()
 	init_memory();
 	ows_setup(myrom);
 	for(;;)
-	{
-		if(ows_wait_request(0))
-		{
-			uint16_t memory_address;
-			uint8_t b;
-			ow_crc16_reset();
-			switch(ows_recv())
-			{
-			case 0xAA: /* READ MEMORY */
-				ow_crc16_update(0xAA);
-
-				b = ows_recv();
-				((uint8_t*)&memory_address)[0] = b;
-				ow_crc16_update(b);
-
-				b = ows_recv();
-				((uint8_t*)&memory_address)[1] = b;
-				ow_crc16_update(b);
-
-				for(;;)
-				{
-					uint8_t b = ((uint8_t*)&memory)[memory_address];
-					ows_send(b);
-					ow_crc16_update(b);
-
-					if(errno)
-						break;
-
-					if((memory_address & 0x0F) == 0x0F) /* end of page */
-					{
-						uint16_t crc = ow_crc16_get();
-						ows_send(((uint8_t*)&crc)[0]);
-						ows_send(((uint8_t*)&crc)[1]);
-						ow_crc16_reset();
-					}
-					++memory_address;
-					if(memory_address >= sizeof(memory))
-						while(! errno)
-							ows_send(0xFF);
-				}
-				break;
-			case 0x55: /* WRITE MEMORY */
-				ow_crc16_update(0x55);
-
-				b = ows_recv();
-				((uint8_t*)&memory_address)[0] = b;
-				ow_crc16_update(b);
-
-				b = ows_recv();
-				((uint8_t*)&memory_address)[1] = b;
-				ow_crc16_update(b);
-
-				for(;;)
-				{
-					b = ows_recv();
-					if(errno)
-						break;
-					ow_crc16_update(b);
-					uint16_t crc = ow_crc16_get();
-					ows_send(((uint8_t*)&crc)[0]);
-					ows_send(((uint8_t*)&crc)[1]);
-
-					((uint8_t*)&memory)[memory_address] = b;
-
-					ows_send(b);
-					if(errno)
-						break;
-
-					++memory_address;
-					ow_crc16_reset();
-					ow_crc16_update(((uint8_t*)&memory_address)[0]);
-					ow_crc16_update(((uint8_t*)&memory_address)[1]);
-				}
-
-				break;
-			case 0x3C: /* CONVERT */
-				break;
-			default:
-				break;
-			}
-		}
-	}
+		ows_wait_request();
 }
 
+void ows_process_cmds()
+{
+	uint16_t memory_address;
+	uint8_t b;
+	ow_crc16_reset();
+	switch(ows_recv())
+	{
+	case 0xAA: /* READ MEMORY */
+		ow_crc16_update(0xAA);
 
+		b = ows_recv();
+		((uint8_t*)&memory_address)[0] = b;
+		ow_crc16_update(b);
+
+		b = ows_recv();
+		((uint8_t*)&memory_address)[1] = b;
+		ow_crc16_update(b);
+
+		for(;;)
+		{
+			uint8_t b = ((uint8_t*)&memory)[memory_address];
+			ows_send(b);
+			ow_crc16_update(b);
+
+			if(errno)
+				break;
+
+			if((memory_address & 0x0F) == 0x0F) /* end of page */
+			{
+				uint16_t crc = ow_crc16_get();
+				ows_send(((uint8_t*)&crc)[0]);
+				ows_send(((uint8_t*)&crc)[1]);
+				ow_crc16_reset();
+			}
+			++memory_address;
+			if(memory_address >= sizeof(memory))
+				while(! errno)
+					ows_send(0xFF);
+		}
+		break;
+	case 0x55: /* WRITE MEMORY */
+		ow_crc16_update(0x55);
+
+		b = ows_recv();
+		((uint8_t*)&memory_address)[0] = b;
+		ow_crc16_update(b);
+
+		b = ows_recv();
+		((uint8_t*)&memory_address)[1] = b;
+		ow_crc16_update(b);
+
+		for(;;)
+		{
+			b = ows_recv();
+			if(errno)
+				break;
+			ow_crc16_update(b);
+			uint16_t crc = ow_crc16_get();
+			ows_send(((uint8_t*)&crc)[0]);
+			ows_send(((uint8_t*)&crc)[1]);
+
+			((uint8_t*)&memory)[memory_address] = b;
+
+			ows_send(b);
+			if(errno)
+				break;
+
+			++memory_address;
+			ow_crc16_reset();
+			ow_crc16_update(((uint8_t*)&memory_address)[0]);
+			ow_crc16_update(((uint8_t*)&memory_address)[1]);
+		}
+
+		break;
+	case 0x3C: /* CONVERT */
+		break;
+	default:
+		break;
+	}
+}
